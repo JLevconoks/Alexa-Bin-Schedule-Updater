@@ -2,8 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
@@ -15,7 +13,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode/utf16"
 )
 
 type BinSchedule struct {
@@ -49,13 +46,19 @@ func run() {
 	schedule := BinSchedule{DocumentId: fmt.Sprintf("LEEDS_%v", premisesId), PremisesId: premisesId, LastUpdated: time.Now().Format(time.RFC1123Z)}
 
 	log.Println("Processing file")
+	lineCounter := 0
+	scheduleCounter := 0
 	for scanner.Scan() {
-		b := scanner.Bytes()
-		s, _ := decodeUtf16([]byte(b), binary.BigEndian)
+		lineCounter++
+
+		s := string(scanner.Bytes())
 		split := strings.Split(s, ",")
 
 		if split[0] == schedule.PremisesId {
-			dateString := split[2][:strings.LastIndex(split[2], "\r")]
+			scheduleCounter++
+			log.Println("Found:", s)
+
+			dateString := strings.TrimSpace(split[2])
 
 			switch split[1] {
 			case "BLACK":
@@ -67,7 +70,8 @@ func run() {
 			}
 		}
 	}
-	log.Println("Done processing")
+	log.Printf("Done processing, line count: %v, schedule count: %v\n", lineCounter, scheduleCounter)
+
 	store(schedule)
 	log.Println("All done.")
 }
@@ -97,12 +101,4 @@ func store(binSchedule BinSchedule) {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func decodeUtf16(b []byte, order binary.ByteOrder) (string, error) {
-	ints := make([]uint16, len(b)/2)
-	if err := binary.Read(bytes.NewReader(b), order, &ints); err != nil {
-		return "", err
-	}
-	return string(utf16.Decode(ints)), nil
 }
